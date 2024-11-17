@@ -18,7 +18,30 @@ def get_matches(image1, image2) -> typing.Tuple[
     bf = cv2.BFMatcher()
     matches_1_to_2: typing.Sequence[typing.Sequence[cv2.DMatch]] = bf.knnMatch(descriptors1, descriptors2, k=2)
 
-    # YOUR CODE HERE
+    k = 0.75
+    good_matches_1_to_2 = []
+    for m, n in matches_1_to_2:
+        if m.distance < k * n.distance:
+            good_matches_1_to_2.append(m)
+
+    matches_2_to_1: typing.Sequence[typing.Sequence[cv2.DMatch]] = bf.knnMatch(descriptors2, descriptors1, k=2)
+
+    good_matches_2_to_1 = []
+    for m, n in matches_2_to_1:
+        if m.distance < k * n.distance:
+            good_matches_2_to_1.append(m)
+
+    matches_dict_1_to_2 = {m.queryIdx: m.trainIdx for m in good_matches_1_to_2}
+    matches_dict_2_to_1 = {m.queryIdx: m.trainIdx for m in good_matches_2_to_1}
+
+    mutual_matches = []
+    for m in good_matches_1_to_2:
+        idx1 = m.queryIdx
+        idx2 = m.trainIdx
+        if idx2 in matches_dict_2_to_1 and matches_dict_2_to_1[idx2] == idx1:
+            mutual_matches.append(m)
+
+    return kp1, kp2, mutual_matches
 
 
 def get_second_camera_position(kp1, kp2, matches, camera_matrix):
@@ -27,6 +50,24 @@ def get_second_camera_position(kp1, kp2, matches, camera_matrix):
     E, mask = cv2.findEssentialMat(coordinates1, coordinates2, camera_matrix)
     _, R, t, mask = cv2.recoverPose(E, coordinates1, coordinates2, camera_matrix)
     return R, t, E
+
+# Function to compute the projection matrix for a camera
+def compute_projection_matrix(K, R, t):
+    """
+    Compute the projection matrix P = K * [R | t]
+
+    :param K: Intrinsic camera matrix (3x3)
+    :param R: Rotation matrix from world to camera coordinates (3x3)
+    :param t: Translation vector from world to camera coordinates (3x1)
+    :return: Projection matrix P (3x4)
+    """
+    # Ensure t is a column vector
+    t = t.reshape(3, 1)
+    # Combine R and t into [R | t]
+    Rt = np.hstack((R, t))
+    # Compute projection matrix
+    P = K @ Rt
+    return P
 
 
 # Task 3
@@ -40,8 +81,37 @@ def triangulation(
         kp2: typing.Sequence[cv2.KeyPoint],
         matches: typing.Sequence[cv2.DMatch]
 ):
-    pass
-    # YOUR CODE HERE
+    P1 = compute_projection_matrix(camera_matrix, camera1_rotation_matrix, camera1_translation_vector)
+    P2 = compute_projection_matrix(camera_matrix, camera2_rotation_matrix, camera2_translation_vector)
+
+    points_3d = []
+
+    for match in matches:
+        idx1 = match.queryIdx
+        idx2 = match.trainIdx
+
+        kp_1 = kp1[idx1]
+        kp_2 = kp2[idx2]
+
+        x1, y1 = kp_1.pt
+        x2, y2 = kp_2.pt
+
+        A = np.array([
+            x1 * P1[2, :] - P1[0, :],
+            y1 * P1[2, :] - P1[1, :],
+            x2 * P2[2, :] - P2[0, :],
+            y2 * P2[2, :] - P2[1, :]
+        ])
+
+        _, _, Vt = np.linalg.svd(A)
+        X = Vt[-1]
+        X = X / X[3]
+        points_3d.append(X[:3])
+
+    points_3d = np.array(points_3d)
+
+    return points_3d
+
 
 
 # Task 4
@@ -56,9 +126,10 @@ def resection(
     # YOUR CODE HERE
 
 
+
+
 def convert_to_world_frame(translation_vector, rotation_matrix):
     pass
-    # YOUR CODE HERE
 
 
 def visualisation(
