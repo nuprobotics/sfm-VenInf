@@ -129,14 +129,7 @@ def resection(
 
 
 def convert_to_world_frame(translation_vector, rotation_matrix):
-    import numpy as np
-
-    # YOUR CODE HERE
-
-    # Compute the inverse rotation matrix (transpose)
     R_cw = rotation_matrix.T
-
-    # Compute the camera position in world coordinates: C = -R_cw * t
     camera_position = -R_cw @ translation_vector
 
     return camera_position, R_cw
